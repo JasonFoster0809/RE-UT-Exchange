@@ -1,54 +1,60 @@
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000/api'
+const API_URL = 'http://localhost:5000/api'
 
-export function getToken(){
-  return localStorage.getItem('token') || ''
-}
-export function setToken(t){
-  if(t) localStorage.setItem('token', t)
+export function getToken(){ return localStorage.getItem('token') }
+export function setToken(token){ 
+  if(token) localStorage.setItem('token', token)
   else localStorage.removeItem('token')
 }
 
-async function req(path, {method='GET', body, auth=false} = {}){
-  const headers = {'Content-Type':'application/json'}
-  if(auth){
-    const t = getToken()
-    if(t) headers['Authorization'] = `Bearer ${t}`
-  }
-  const res = await fetch(`${API_BASE}${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined })
-  const data = await res.json().catch(()=> ({}))
-  if(!res.ok){
-    const msg = data?.error || `HTTP ${res.status}`
-    throw new Error(msg)
-  }
+async function request(method, endpoint, body, isFile=false){
+  const headers = {}
+  const token = getToken()
+  if(token) headers['Authorization'] = `Bearer ${token}`
+  
+  if(!isFile) headers['Content-Type'] = 'application/json'
+
+  const opts = { method, headers }
+  if(body) opts.body = isFile ? body : JSON.stringify(body)
+
+  const res = await fetch(API_URL + endpoint, opts)
+  const data = await res.json()
+  if(!res.ok) throw new Error(data.error || 'Có lỗi xảy ra')
   return data
 }
 
 export const api = {
-  // Admin
-  adminUsers: () => req('/admin/users', {auth:true}),
-  adminSetUserRole: (id, role) => req(`/admin/users/${id}/role`, {method:'PUT', body:{role}, auth:true}),
-  adminItems: () => req('/admin/items', {auth:true}),
-  adminSetItemStatus: (id, status) => req(`/admin/items/${id}/status`, {method:'PUT', body:{status}, auth:true}),
-  adminSwaps: () => req('/admin/swaps', {auth:true}),
+  register: (data) => request('POST', '/auth/register', data),
+  login: (data) => request('POST', '/auth/login', data),
+  me: () => request('GET', '/me'),
+  updateMe: (data) => request('PUT', '/me', data),
 
-  health: () => req('/health'),
-  register: (payload) => req('/auth/register', {method:'POST', body: payload}),
-  login: (payload) => req('/auth/login', {method:'POST', body: payload}),
-  me: () => req('/me', {auth:true}),
+  // UPLOAD ẢNH
+  uploadImage: (formData) => request('POST', '/upload', formData, true),
 
-  listItems: (params={}) => {
+  listItems: (params) => {
     const qs = new URLSearchParams(params).toString()
-    return req(`/items${qs ? `?${qs}` : ''}`)
+    return request('GET', `/items?${qs}`)
   },
-  getItem: (id) => req(`/items/${id}`),
-  createItem: (payload) => req('/items', {method:'POST', body: payload, auth:true}),
-  updateItem: (id, payload) => req(`/items/${id}`, {method:'PUT', body: payload, auth:true}),
-  deleteItem: (id) => req(`/items/${id}`, {method:'DELETE', auth:true}),
+  createItem: (data) => request('POST', '/items', data),
+  updateItem: (id, data) => request('PUT', `/items/${id}`, data),
+  deleteItem: (id) => request('DELETE', `/items/${id}`),
 
-  createSwap: (payload) => req('/swaps', {method:'POST', body: payload, auth:true}),
-  mySwaps: () => req('/swaps/mine', {auth:true}),
-  incomingSwaps: () => req('/swaps/incoming', {auth:true}),
-  setSwapStatus: (id, status) => req(`/swaps/${id}/status`, {method:'PUT', body:{status}, auth:true}),
-  listMessages: (swapId) => req(`/swaps/${swapId}/messages`, {auth:true}),
-  sendMessage: (swapId, body) => req(`/swaps/${swapId}/messages`, {method:'POST', body:{body}, auth:true}),
+  getWishlist: () => request('GET', '/wishlist'),
+  toggleWishlist: (id) => request('POST', `/wishlist/${id}`),
+
+  createSwap: (data) => request('POST', '/swaps', data),
+  mySwaps: () => request('GET', '/swaps/mine'),
+  incomingSwaps: () => request('GET', '/swaps/incoming'),
+  
+  // ZALO CHAT
+  getConversations: () => request('GET', '/chat/conversations'),
+  getPartnerMessages: (pid) => request('GET', `/chat/partner/${pid}`),
+  sendPartnerMessage: (pid, body) => request('POST', `/chat/partner/${pid}`, {body}),
+
+  adminStats: () => request('GET', '/admin/stats'),
+  adminItems: () => request('GET', '/admin/items'),
+  adminUsers: () => request('GET', '/admin/users'),
+  adminSwaps: () => request('GET', '/admin/swaps'),
+  adminSetItemStatus: (id, status) => request('PUT', `/admin/items/${id}/status`, {status}),
+  adminSetUserRole: (id, role) => request('PUT', `/admin/users/${id}/role`, {role}),
 }
